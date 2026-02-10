@@ -1,0 +1,70 @@
+PROJECT: Learning Path Optimizer
+GOAL: Create an algorithm that schedules learning tasks based on priority and available time.
+
+OBJECT 'Skill':
+- Name (String)
+- Priority (Integer 1-5)
+- TimeNeeded (Integer Minutes)
+- IsCompleted (Boolean)
+
+MAIN PROGRAM FLOW:
+
+INITIALIZATION
+
+Load existing data from file (if any).
+
+Ask User: "How many minutes do you have today?" (DailyLimit)
+
+MAIN MENU LOOP
+
+Show options: Add Skill, Show Plan, Finish Day, Exit.
+
+ALGORITHM: GENERATE PLAN
+
+Create a copy of the Skills List.
+
+SORT list by Priority (High -> Low).
+
+IF priorities are equal, SORT by TimeNeeded (Low -> High).
+
+LOOP through sorted list:
+
+IF (Skill.TimeNeeded <= DailyLimit):
+
+Add Skill to "Today's Plan".
+
+Subtract Skill.TimeNeeded from DailyLimit.
+
+ELSE:
+
+Mark Skill as "Skipped" (Not enough time).
+
+Display "Today's Plan" to user.
+
+LOGIC: FINISH DAY (End of Day Review)
+
+LOOP through "Today's Plan":
+
+Ask User: "Did you complete [Skill]?"
+
+IF (User says YES):
+
+Check: Is CurrentPriority > OriginalPriority?
+
+YES -> Reset Priority to Original (Reward).
+
+NO -> Keep Priority same.
+
+IF (User says NO):
+
+Increase Priority by +1 (Penalty/Escalation).
+
+(Max Priority cap could be 10).
+
+DATA SAVING
+
+Serialize the List of Skills to JSON format.
+
+Write to "user_skills.json".
+
+EXIT
