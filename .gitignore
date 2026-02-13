@@ -1,0 +1,20 @@
+#.NET Core folders
+
+bin/
+obj/
+
+# Database files
+
+*.db
+*.db-shm
+*.db-wal
+
+# VS Code settings
+
+.vscode/
+
+# User-specific files
+
+*.user
+*.userosscache
+*.sln.docuser
