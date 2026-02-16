@@ -1,10 +1,5 @@
-﻿
-using System.Configuration.Assemblies;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Security.Cryptography.X509Certificates;
-using SQLite; 
-
+﻿using System.Diagnostics;
+using SQLite;
 
 namespace SkillPlan
 {
@@ -16,6 +11,39 @@ namespace SkillPlan
         Dabbler = 4
     }
 
+    public static class SkillRules
+    {
+        // Standard session duration for optimal focus
+        public static int GetIdealSessionLength(PriorityLevel p) => p switch
+        {
+            PriorityLevel.Core => 60,
+            PriorityLevel.Builder => 40,
+            PriorityLevel.Maintainer => 20,
+            PriorityLevel.Dabbler => 20,
+            _ => 20
+        };
+
+        // Minimum duration required for effective practice
+        public static int GetSurvivalMinimum(PriorityLevel p) => p switch
+        {
+            PriorityLevel.Core => 20,
+            PriorityLevel.Builder => 20,
+            PriorityLevel.Maintainer => 10,
+            PriorityLevel.Dabbler => 5,
+            _ => 5
+        };
+
+        // Maximum daily duration to prevent fatigue
+        public static int GetDailyMax(PriorityLevel p) => p switch
+        {
+            PriorityLevel.Core => 240,     // 4 hours max
+            PriorityLevel.Builder => 90,   // 1.5 hours max
+            PriorityLevel.Maintainer => 45, // 45 mins max
+            PriorityLevel.Dabbler => 60,    // 1 hour max
+            _ => 60
+        };
+    }
+
     [Table("Profiles")]
     public class Profile
     {
@@ -23,12 +51,12 @@ namespace SkillPlan
         public int Id { get; set; }
         public string Name { get; set; }
         public int Age { get; set; }
-        public int AvailableMinutesPerDay { get; set; }
+        public int WeekdayAvailableMinutes { get; set; }
+        public int WeekendAvailableMinutes { get; set; }
         public bool HolidaysAvailable { get; set; }
         public bool WeekendsAvailable { get; set; }
         [Ignore]
         public int TotalSkills => Program.GetTotalSkills();
-
     }
 
     [Table("WeeklyTasks")]
@@ -43,26 +71,34 @@ namespace SkillPlan
         public bool IsCompleted { get; set; }
     }
 
-
-
     [Table("Skills")]
     public class Skill
     {
         [PrimaryKey, AutoIncrement]
         public int Id { get; set; }
         public string Name { get; set; }
-        public PriorityLevel Priority{ get; set; }
+        public PriorityLevel Priority { get; set; }
         public int UrgencyLevel { get; set; }
         public DateTime LastPracticed { get; set; }
         public int MinutesInvested { get; set; }
-
-        
+        // Tracks accumulated missed time to be rescheduled
+        public int MinutesDebt { get; set; } 
     }
+
+    // Fields used instead of Properties to allow passing by reference
+    public class DailyTimeBuckets
+    {
+        public int Core;
+        public int Builder;
+        public int Maintainer;
+        public int Dabbler;
+    }
+
     public class Program
     {
         private static string dbPath = "userData.db";
         private static SQLiteConnection database = new SQLiteConnection(dbPath);
-        
+
         public static void Main(string[] args)
         {
             database.CreateTable<Skill>();
@@ -70,68 +106,53 @@ namespace SkillPlan
             database.CreateTable<WeeklyTask>();
             MainMenu();
         }
-        
 
-        // Displays the main menu and handles user input for navigating through the application.
         public static void MainMenu()
         {
             bool exitProgram = false;
-            string? userChoice = "";
-            database.CreateTable<Skill>();
+            
             do
             {
                 Console.WriteLine("------Main Menu--------");
-                if (database.Table<Profile>().FirstOrDefault() == null)
+                var currentProfile = database.Table<Profile>().FirstOrDefault();
+
+                if (currentProfile == null)
                 {
                     Console.WriteLine("Please complete your profile to get started.");
-
                 }
                 else
                 {
-                    Console.WriteLine($"Welcome back, {database.Table<Profile>().FirstOrDefault()?.Name}! You have {database.Table<Skill>().Count()} skills in your plan.");
+                    Console.WriteLine($"Welcome back, {currentProfile.Name}! You have {database.Table<Skill>().Count()} skills in your plan.");
                 }
                 Console.WriteLine("1. Manage Profile");
                 Console.WriteLine("2. Manage Skills");
                 Console.WriteLine("3. View Skill Plan");
-                Console.WriteLine("4. Daily Check-in");
+                Console.WriteLine("4. Daily Check-in (Log Progress)");
                 Console.WriteLine("5. Exit");
 
-                userChoice = Console.ReadLine();
+                string? userChoice = Console.ReadLine();
 
                 switch (userChoice)
                 {
-                    case "1":
+                    case "1": Console.Clear(); ManageProfile(); break;
+                    case "2": Console.Clear(); ManageSkills(); break;
+                    case "3": Console.Clear(); ViewSkillPlan(); break;
+                    case "4": Console.Clear(); DailyCheckIn(); break;
+                    case "5": 
+                        exitProgram = true; 
                         Console.Clear();
-                        ManageProfile();
+                        Console.WriteLine("Exiting. Goodbye!");
+                        Thread.Sleep(1000); 
                         break;
-                    case "2":
-                        Console.Clear();
-                        ManageSkills();
-                        break;
-                    case "3":
-                        Console.Clear();
-                        ViewSkillPlan();
-                        break;
-                    case "4":
-                        Console.Clear();
-                        DailyCheckIn();
-                        break;
-                    case "5":
-                        exitProgram = true;
-                        Console.Clear();
-                        Console.WriteLine("Exiting the program. Goodbye!");
-                        Thread.Sleep(2000); // Pause for 2 seconds before exiting
-                        break;
-                    default:
-                        Console.WriteLine("Invalid choice. Please select a valid option.");
-                        break;
+                    default: Console.WriteLine("Invalid choice."); break;
                 }
 
             } while (!exitProgram);
         }
+
+        // ================= SKILL MANAGEMENT =================
         public static void ManageSkills()
         {
-
             Console.WriteLine("------Manage Skills--------");
             Console.WriteLine("1. View Skill List");
             Console.WriteLine("2. Add Skill");
@@ -140,69 +161,89 @@ namespace SkillPlan
             string? userChoice = Console.ReadLine();
             switch (userChoice)
             {
-                case "1":
-                    Console.Clear();
-                    ViewSkills();
-                    break;
-                case "2":
-                    Console.Clear();
-                    AddSkill();
-                    break;
-                case "3":
-                    Console.Clear();
-                    RemoveSkill();
-                    break;
-                default:
-                    Console.WriteLine("Invalid choice. Please select a valid option.");
-                    break;
+                case "1": Console.Clear(); ViewSkills(); break;
+                case "2": Console.Clear(); AddSkill(); break;
+                case "3": Console.Clear(); RemoveSkill(); break;
+                default: Console.WriteLine("Invalid choice."); break;
             }
-            
         }
+
         public static void ViewSkills()
         {
             var skills = database.Table<Skill>().ToList();
             if (skills.Count == 0)
             {
                 Console.Clear();
-                Console.WriteLine("No skills found. Please add some skills first.");
+                Console.WriteLine("No skills found.");
                 return;
             }
             Console.WriteLine("------Skill List--------");
             foreach (var skill in skills)
             {
-                Console.WriteLine($"ID: {skill.Id}, Name: {skill.Name}, Priority: {skill.Priority}, Urgency Level: {skill.UrgencyLevel}, Last Practiced: {skill.LastPracticed}, Minutes Invested: {skill.MinutesInvested}");
+                string debtWarning = skill.MinutesDebt > 0 ? $" [DEBT: {skill.MinutesDebt}m]" : "";
+                Console.WriteLine($"ID: {skill.Id} | {skill.Name} | {skill.Priority}{debtWarning} | Last: {skill.LastPracticed.ToShortDateString()}");
             }
+        }
 
-        }  
         public static void AddSkill()
         {
-            
             string? name;
             do
             {
                 Console.WriteLine("Enter skill name:");
                 name = Console.ReadLine();
-                if(database.Table<Skill>().Where(s => s.Name.ToLower() == name.ToLower()).FirstOrDefault() != null)
+                if (database.Table<Skill>().Any(s => s.Name.ToLower() == name?.ToLower()))
                 {
-                    Console.WriteLine("Skill already exists. Please enter a different skill name.");
+                    Console.WriteLine("Skill already exists.");
                     name = null;
                 }
                 else if (string.IsNullOrWhiteSpace(name))
                 {
-                    Console.WriteLine("Skill name cannot be empty. Please enter a valid skill name.");
-
+                    Console.WriteLine("Name cannot be empty.");
                 }
             } while (name == null);
+
+            Console.WriteLine("Select Priority (1: Core, 2: Builder, 3: Maintainer, 4: Dabbler):");
             
-            Console.WriteLine("Select a Priority Level (1 - 4):");
-            Console.WriteLine("1. Core (Daily Practice - Critical Skills)");
-            Console.WriteLine("2. Builder (3-4x Week - Major Hobbies)");
-            Console.WriteLine("3. Maintainer (2x Week - Keeping sharp)");
-            Console.WriteLine("4. Dabbler (1x Week - Low pressure)");
             int priorityInt;
             while (!int.TryParse(Console.ReadLine(), out priorityInt) || !Enum.IsDefined(typeof(PriorityLevel), priorityInt))
             {
-                Console.WriteLine("Invalid input. Please enter a number between 1 and 4.");
+                Console.WriteLine("Invalid input. Enter 1-4.");
+            }
+
+            // --- Capacity Validation Logic ---
+            if (priorityInt == (int)PriorityLevel.Core)
+            {
+                int coreCount = database.Table<Skill>().ToList().Count(s => s.Priority == PriorityLevel.Core);
+                var profile = database.Table<Profile>().FirstOrDefault();
+
+                if (coreCount >= 2)
+                {
+                    Console.WriteLine("\nLimit Reached: Maximum 2 Core Skills allowed to ensure focus.");
+                    Console.ReadLine();
+                    return;
+                }
+
+                if (coreCount >= 1 && (profile == null || profile.WeekdayAvailableMinutes < 240))
+                {
+                     Console.WriteLine("\nCapacity Warning: < 4 hours available. Recommended limit is 1 Core Skill.");
+                     Console.ReadLine();
+                     return;
+                }
+            }
+            else if (priorityInt == (int)PriorityLevel.Builder)
+            {
+                int builderCount = database.Table<Skill>().ToList().Count(s => s.Priority == PriorityLevel.Builder);
+                var profile = database.Table<Profile>().FirstOrDefault();
+                
+                int limit = (profile != null && profile.WeekdayAvailableMinutes > 240) ? 4 : 2;
+
+                if (builderCount >= limit)
+                {
+                    Console.WriteLine($"\nLimit Reached: Maximum {limit} Builder Skills allowed based on available time.");
+                    Console.ReadLine();
+                    return;
+                }
             }
 
             Skill newSkill = new Skill
@@ -211,313 +252,403 @@ namespace SkillPlan
                 Priority = (PriorityLevel)priorityInt,
                 UrgencyLevel = 1,
                 LastPracticed = DateTime.MinValue,
-                MinutesInvested = 0
+                MinutesInvested = 0,
+                MinutesDebt = 0
             };
 
             database.Insert(newSkill);
-
+            Console.WriteLine("Skill added.");
         }
+
         public static void RemoveSkill()
         {
-            Console.WriteLine("Enter the ID of the skill to remove:");
-            int skillId;
-            while (!int.TryParse(Console.ReadLine(), out skillId))
+            Console.WriteLine("Enter ID to remove:");
+            if(int.TryParse(Console.ReadLine(), out int skillId))
             {
-                Console.WriteLine("Invalid input. Please enter a valid skill ID.");
+                var skill = database.Table<Skill>().FirstOrDefault(s => s.Id == skillId);
+                if (skill != null)
+                {
+                    database.Delete(skill);
+                    Console.WriteLine("Skill removed.");
+                }
+                else Console.WriteLine("Not found.");
             }
-            var skill = database.Table<Skill>().Where(s => s.Id == skillId).FirstOrDefault();   
-            if (skill != null)
-            {
-                database.Delete(skill);
-                Console.WriteLine("Skill removed successfully!");
-            }
-            else
-            {
-                Console.WriteLine("Skill not found. Please enter a valid skill ID.");
-            }
-
         }
 
+        // ================= PROFILE MANAGEMENT =================
         public static void ManageProfile()
         {
             Console.WriteLine("------Manage Profile--------");
-            Console.WriteLine("1. View Profile");
-            Console.WriteLine("2. Edit Profile");
-
-            string? userChoice = Console.ReadLine();
-            switch (userChoice)
-            {
-                case "1":
-                    Console.Clear();
-                    ViewProfile();
-                    break;
-                case "2":
-                    Console.Clear();        
-                    EditProfile();
-                    break;
-                default:
-                    Console.WriteLine("Invalid choice. Please select a valid option.");
-                    break;
-            }
+            Console.WriteLine("1. View Profile\n2. Edit Profile");
+            string? choice = Console.ReadLine();
+            
+            if (choice == "1") { Console.Clear(); ViewProfile(); }
+            else if (choice == "2") { Console.Clear(); EditProfile(); }
         }
+
         public static void ViewProfile()
         {
             var profile = database.Table<Profile>().FirstOrDefault();
             if (profile != null)
             {
                 Console.WriteLine($"Name: {profile.Name}");
-                Console.WriteLine($"Age: {profile.Age}");
-                Console.WriteLine($"Available Minutes Per Day: {profile.AvailableMinutesPerDay}");
-                Console.WriteLine($"Holidays Available: {(profile.HolidaysAvailable ? "Yes" : "No")}");
-                Console.WriteLine($"Weekends Available: {(profile.WeekendsAvailable ? "Yes" : "No")}");
-                Console.WriteLine($"Total Skills: {profile.TotalSkills}");
+                Console.WriteLine($"Weekday Mins: {profile.WeekdayAvailableMinutes} | Weekend Mins: {profile.WeekendAvailableMinutes}");
+                Console.WriteLine($"Skills Tracked: {profile.TotalSkills}");
             }
-            else
-            {
-                Console.WriteLine("Profile not found. Please complete your profile first.");
-            }
+            else Console.WriteLine("No profile found.");
         }
+
         public static void EditProfile()
+        {
+            var profile = database.Table<Profile>().FirstOrDefault();
+            bool isNew = profile == null;
+            if (isNew) profile = new Profile();
+            
+            ProfileForm(profile, isNew);
+        }
+
+        public static void ProfileForm(Profile profile, bool isNew)
+        {
+            Console.WriteLine("Name:");
+            profile.Name = Console.ReadLine();
+
+            Console.WriteLine("Age:");
+            int.TryParse(Console.ReadLine(), out int age);
+            profile.Age = age;
+
+            Console.WriteLine("Weekday Minutes:");
+            int.TryParse(Console.ReadLine(), out int wdMins);
+            profile.WeekdayAvailableMinutes = wdMins;
+
+            Console.WriteLine("Weekend Minutes:");
+            int.TryParse(Console.ReadLine(), out int weMins);
+            profile.WeekendAvailableMinutes = weMins;
+
+            Console.WriteLine("Holidays Available? (y/n):");
+            profile.HolidaysAvailable = Console.ReadLine()?.ToLower() == "y";
+
+            Console.WriteLine("Practice on Weekends? (y/n):");
+            profile.WeekendsAvailable = Console.ReadLine()?.ToLower() == "y";
+
+            if (isNew) database.Insert(profile);
+            else database.Update(profile);
+            
+            Console.WriteLine("Profile Saved.");
+        }
+
+        // ================= PLAN GENERATION & CHECK-IN =================
+        public static void ViewSkillPlan()
         {
             var profile = database.Table<Profile>().FirstOrDefault();
             if (profile == null)
             {
-                profile = new Profile();
-                Console.WriteLine("Creating a new profile.");
-                ProfileForm(profile, true);
-                
+                Console.WriteLine("Profile required.");
+                return;
             }
-            else
-            {
-                Console.WriteLine("Editing existing profile.");
-                ProfileForm(profile, false);
-            }     
-        
-        }
-        public static void ProfileForm(Profile profile, bool isNew)
-        {
-            Console.WriteLine("Enter your name:");
-            profile.Name = Console.ReadLine();
 
-            Console.WriteLine("Enter your age:");
-            int age;
-            while (!int.TryParse(Console.ReadLine(), out age) || age <= 0)
-            {
-                Console.WriteLine("Invalid input. Please enter a valid age.");
-            }
-            profile.Age = age;
+            Console.WriteLine("Refreshing Plan...");
+            GenerateWeeklyPlan(profile);
 
-            Console.WriteLine("Enter available minutes per day:");
-            int minutes;
-            while (!int.TryParse(Console.ReadLine(), out minutes) || minutes <= 0)
-            {
-                Console.WriteLine("Invalid input. Please enter a valid number of minutes.");
-            }
-            profile.AvailableMinutesPerDay = minutes;
-
-            Console.WriteLine("Do you have holidays available? (y/n):");
-            string? holidaysInput = Console.ReadLine();
-            profile.HolidaysAvailable = holidaysInput != null && holidaysInput.ToLower() == "y";
-
-            Console.WriteLine("Are weekends available? (y/n):");
-            string? weekendsInput = Console.ReadLine();
-            profile.WeekendsAvailable = weekendsInput != null && weekendsInput.ToLower() == "y";
-
-            if (isNew)
-            {
-                database.Insert(profile);
-                Console.WriteLine("Profile created successfully!");
-            }
-            else
-            {
-                database.Update(profile);
-                Console.WriteLine("Profile updated successfully!");
-            }
-        }
-
-        public static void ViewSkillPlan()
-        {
-            Console.WriteLine("This feature is under development. Please check back later.");
-            var futureTasks = database.Table<WeeklyTask>().Where(t => t.ScheduledDate >= DateTime.Today).OrderBy(t => t.ScheduledDate).ToList();
+            var futureTasks = database.Table<WeeklyTask>()
+                .Where(t => t.ScheduledDate >= DateTime.Today)
+                .OrderBy(t => t.ScheduledDate).ToList();
 
             if (futureTasks.Count == 0)
             {
                 Console.Clear();
-                Console.WriteLine("No upcoming skill practice sessions scheduled.");
-                Console.WriteLine("Would you like to generate a new skill practice plan? (y/n):");
-                if (Console.ReadLine()?.ToLower() == "y")
-                {
-                    var profile = database.Table<Profile>().FirstOrDefault();
-                    if (profile == null)
-                    {
-                        Console.WriteLine("Profile not found. Please complete your profile first.");
-                        return;
-                    }
-                    else
-                    {
-                        Console.WriteLine("Generating new skill practice plan...");
-                        Thread.Sleep(2000);
-                    }
-                    GenerateWeeklyPlan(profile);
-                    Console.WriteLine("New skill practice plan generated successfully!");
-                }
+                Console.WriteLine("No tasks scheduled.");
             }
             else
-            {   
+            {
                 Console.Clear();
-                Console.WriteLine("------YOUR WEEKLY LEARNING PLAN--------");
+                Console.WriteLine("------ WEEKLY PLAN --------");
                 var groupedTasks = futureTasks.GroupBy(t => t.ScheduledDate.Date).OrderBy(g => g.Key);
 
                 foreach (var group in groupedTasks)
                 {
-                    string dateHeader = group.Key.ToString("dddd, MMMM dd");
-                    Console.WriteLine($"\n{dateHeader}");
-                    Console.WriteLine("--------------------------------");
+                    Console.WriteLine($"\n{group.Key:dddd, MMM dd}");
+                    Console.WriteLine(new string('-', 20));
 
                     foreach (var task in group)
                     {
-                        Console.WriteLine($" - Skill: {task.SkillName}, Duration: {task.DurationMinutes} minutes, Completed: {(task.IsCompleted ? "Yes" : "No")}");
-                    }
-
-                    Console.WriteLine("\nPress Enter to return to menu...");
-                    Console.ReadLine();
-                }
-            }
-
-
-        }
-
-        public static void GenerateWeeklyPlan(Profile profile)
-        {
-            Console.WriteLine("\nInitializing Planning Engine...");
-            
-            // 1. Clear old future plans to avoid duplicates
-            // We use SQL directly here for efficiency
-            database.Execute("DELETE FROM WeeklyTasks WHERE ScheduledDate >= ?", DateTime.Today.Ticks);
-
-            var allSkills = database.Table<Skill>().ToList();
-            if (allSkills.Count == 0)
-            {
-                Console.WriteLine("No skills found! Add some skills before generating a plan.");
-                return;
-            }
-
-            // 2. The Simulation Dictionary
-            // This tracks when we *pretend* to practice a skill during the simulation
-            var simLastPracticed = new Dictionary<int, DateTime>();
-            foreach(var s in allSkills)
-            {
-                simLastPracticed[s.Id] = s.LastPracticed;
-            }
-
-            DateTime currentDate = DateTime.Today;
-            
-            // 3. Loop through the next 7 days
-            for (int i = 0; i < 7; i++)
-            {
-                // Skip weekends if the user said "No Weekends"
-                bool isWeekend = (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday);
-                if (isWeekend && !profile.WeekendsAvailable)
-                {
-                    currentDate = currentDate.AddDays(1);
-                    continue; 
-                }
-
-                int dailyBudget = profile.AvailableMinutesPerDay;
-
-                // 4. Calculate Urgency based on SIMULATED dates
-                var dailyQueue = allSkills
-                    .Select(s => new 
-                    { 
-                        Skill = s, 
-                        Score = CalculateUrgency(s, simLastPracticed[s.Id]) 
-                    })
-                    .OrderByDescending(x => x.Score) // Highest score first
-                    .ToList();
-
-                // 5. Fill the daily bucket
-                foreach (var item in dailyQueue)
-                {
-                    // Logic: Core skills get 45 mins, others get 30 mins (Dynamic Sizing)
-                    int sessionLength = (item.Skill.Priority == PriorityLevel.Core) ? 45 : 30;
-
-                    if (dailyBudget >= sessionLength)
-                    {
-                        var task = new WeeklyTask
-                        {
-                            SkillId = item.Skill.Id,
-                            SkillName = item.Skill.Name,
-                            ScheduledDate = currentDate,
-                            DurationMinutes = sessionLength,
-                            IsCompleted = false
-                        };
-                        database.Insert(task);
-
-                        // UPDATE SIMULATION: "Pretend" we practiced this today
-                        simLastPracticed[item.Skill.Id] = currentDate;
-                        
-                        dailyBudget -= sessionLength;
+                        string status = task.IsCompleted ? "[DONE]" : "[ ]";
+                        Console.WriteLine($" {status} {task.SkillName} ({task.DurationMinutes}m)");
                     }
                 }
-                
-                currentDate = currentDate.AddDays(1);
+                Console.ReadLine();
             }
-            
-            Console.WriteLine("Weekly Plan Generated Successfully!");
-            Thread.Sleep(1000); 
         }
 
         public static void DailyCheckIn()
         {
-            Console.WriteLine("------Daily Check-in--------");
-            Console.WriteLine("This feature is under development. Please check back later.");
+            Console.WriteLine("------ Check-in ------");
+            var tasks = database.Table<WeeklyTask>()
+                                .Where(t => t.ScheduledDate.Date == DateTime.Today.Date && !t.IsCompleted)
+                                .ToList();
+
+            if (tasks.Count == 0)
+            {
+                Console.WriteLine("No pending tasks.");
+                Console.ReadLine();
+                return;
+            }
+
+            foreach (var task in tasks)
+            {
+                Console.WriteLine($"\nCompleted: {task.SkillName} ({task.DurationMinutes}m)? (Y/N)");
+                string input = Console.ReadLine()?.ToUpper() ?? "N";
+                var skill = database.Table<Skill>().FirstOrDefault(s => s.Id == task.SkillId);
+                
+                if (input == "Y")
+                {
+                    task.IsCompleted = true;
+                    database.Update(task);
+
+                    if (skill != null)
+                    {
+                        skill.LastPracticed = DateTime.Now;
+                        skill.MinutesInvested += task.DurationMinutes;
+                        if (skill.MinutesDebt > 0) skill.MinutesDebt = Math.Max(0, skill.MinutesDebt - task.DurationMinutes);
+                        database.Update(skill);
+                    }
+                    Console.WriteLine("Logged.");
+                }
+                else
+                {
+                    Console.WriteLine("Skipped. Time added to debt.");
+                    if (skill != null)
+                    {
+                        skill.MinutesDebt += task.DurationMinutes;
+                        database.Update(skill);
+                    }
+                }
+            }
+            Thread.Sleep(1000);
         }
+
+        public static void GenerateWeeklyPlan(Profile profile)
+        {
+            // Clear future uncompleted tasks to allow regeneration based on new parameters
+            database.Execute("DELETE FROM WeeklyTasks WHERE ScheduledDate >= ? AND IsCompleted = 0", DateTime.Today.Ticks);
+
+            var allSkills = database.Table<Skill>().ToList();
+            if (allSkills.Count == 0) return;
+
+            // Track last practiced dates for urgency simulation
+            var simLastPracticed = allSkills.ToDictionary(s => s.Id, s => s.LastPracticed);
+            
+            // Calculate Cap Debt to prevent impossible schedules
+            int totalCoreDebt = allSkills.Where(s => s.Priority == PriorityLevel.Core).Sum(s => s.MinutesDebt);
+            if (totalCoreDebt > 300) totalCoreDebt = 300; 
+
+            DateTime currentDate = DateTime.Today;
+
+            for (int i = 0; i < 7; i++)
+            {
+                bool isWeekend = (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday);
+                if (isWeekend && !profile.WeekendsAvailable) { currentDate = currentDate.AddDays(1); continue; }
+                
+                int dayBudget = isWeekend ? profile.WeekendAvailableMinutes : profile.WeekdayAvailableMinutes;
+
+                // Calculate time allocation
+                var buckets = CalculateTimeDistribution(dayBudget, totalCoreDebt);
+
+                // Adjust simulation debt if Core bucket was expanded to pay it down
+                if (buckets.Core > 60 && totalCoreDebt > 0) 
+                {
+                     int paid = buckets.Core - 60;
+                     totalCoreDebt -= paid;
+                     if (totalCoreDebt < 0) totalCoreDebt = 0;
+                }
+
+                var coreQueue = GetSortedQueue(allSkills, PriorityLevel.Core, simLastPracticed);
+                var builderQueue = GetSortedQueue(allSkills, PriorityLevel.Builder, simLastPracticed);
+                var maintainerQueue = GetSortedQueue(allSkills, PriorityLevel.Maintainer, simLastPracticed);
+                var dabblerQueue = GetSortedQueue(allSkills, PriorityLevel.Dabbler, simLastPracticed);
+
+                // Schedule Categories
+                ProcessCategory(currentDate, buckets.Core, coreQueue, dabblerQueue, ref buckets.Dabbler, simLastPracticed);
+                ProcessCategory(currentDate, buckets.Builder, builderQueue, dabblerQueue, ref buckets.Dabbler, simLastPracticed);
+                ProcessCategory(currentDate, buckets.Maintainer, maintainerQueue, dabblerQueue, ref buckets.Dabbler, simLastPracticed);
+
+                // Allocate spare time
+                if (buckets.Dabbler > 15 && dabblerQueue.Any())
+                {
+                    InsertTask(dabblerQueue.First().Skill, currentDate, buckets.Dabbler, simLastPracticed);
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+        }
+
+        private static List<dynamic> GetSortedQueue(List<Skill> skills, PriorityLevel level, Dictionary<int, DateTime> simDates)
+        {
+            return skills.Where(s => s.Priority == level)
+                         .Select(s => new { Skill = s, Score = CalculateUrgency(s, simDates[s.Id]) })
+                         .OrderByDescending(x => x.Score)
+                         .ToList<dynamic>();
+        }
+
+        private static void ProcessCategory(DateTime date, int timeBudget, List<dynamic> skillQueue, List<dynamic> dabblerQueue, ref int dabblerBudget, Dictionary<int, DateTime> simDates)
+        {
+            foreach (var item in skillQueue)
+            {
+                if (timeBudget < SkillRules.GetSurvivalMinimum(item.Skill.Priority)) break; 
+
+                int duration = SkillRules.GetIdealSessionLength(item.Skill.Priority);
+                
+                // Attempt to recover debt by extending session duration
+                if (item.Skill.MinutesDebt > 0)
+                {
+                    int wanted = duration + item.Skill.MinutesDebt;
+                    duration = Math.Min(wanted, SkillRules.GetDailyMax(item.Skill.Priority));
+                }
+
+                duration = Math.Min(duration, timeBudget);
+
+                InsertTask(item.Skill, date, duration, simDates);
+                timeBudget -= duration;
+
+                // Insert Interleaved Breaks (Dabbler)
+                if (dabblerBudget >= 15 && dabblerQueue.Any())
+                {
+                    var breakSkill = dabblerQueue.First().Skill;
+                    InsertTask(breakSkill, date, 15, simDates);
+                    dabblerBudget -= 15; 
+                    var used = dabblerQueue.First();
+                    dabblerQueue.RemoveAt(0);
+                    dabblerQueue.Add(used);
+                }
+            }
+        }
+
+        private static void InsertTask(Skill skill, DateTime date, int duration, Dictionary<int, DateTime> simDates)
+        {
+            var task = new WeeklyTask
+            {
+                SkillId = skill.Id,
+                SkillName = skill.Name,
+                ScheduledDate = date,
+                DurationMinutes = duration,
+                IsCompleted = false
+            };
+            database.Insert(task);
+            simDates[skill.Id] = date;
+        }
+
         public static int GetTotalSkills()
         {
             return database.Table<Skill>().Count();
         }
 
-        //============ MATH & LOGIC HELPERS ============
+        //============ LOGIC HELPERS ============
+
+        public static DailyTimeBuckets CalculateTimeDistribution(int availableMinutes, int coreDebt)
+        {
+            var buckets = new DailyTimeBuckets();
+
+            // Minimal allocation check
+            if (availableMinutes <= 60)
+            {
+                buckets.Core = availableMinutes;
+                return buckets;
+            }
+
+            buckets.Core = 60;
+            int remaining = availableMinutes - 60;
+
+            if (remaining > 0)
+            {
+                if (availableMinutes >= 120)
+                {
+                    int coreSlice = (int)(remaining * 0.40);
+                    int builderSlice = (int)(remaining * 0.30);
+                    int maintainerSlice = (int)(remaining * 0.20);
+                    int dabblerSlice = remaining - (coreSlice + builderSlice + maintainerSlice);
+
+                    // Overflow handling for Core limit
+                    if (buckets.Core + coreSlice > 240)
+                    {
+                        int overflow = (buckets.Core + coreSlice) - 240;
+                        coreSlice -= overflow;
+                        dabblerSlice += overflow; 
+                    }
+
+                    buckets.Core += coreSlice;
+                    buckets.Builder += builderSlice;
+                    buckets.Maintainer += maintainerSlice;
+                    buckets.Dabbler += dabblerSlice;
+                }
+                else
+                {
+                    int coreSlice = (int)(remaining * 0.70);
+                    int builderSlice = remaining - coreSlice;
+                    buckets.Core += coreSlice;
+                    buckets.Builder += builderSlice;
+                }
+            }
+
+            // Priority Reallocation: Shift time from lower priorities to cover Core debt
+            if (coreDebt > 0)
+            {
+                int needed = coreDebt;
+                
+                // 1. Reallocate from Dabbler
+                int stealDabbler = Math.Min(buckets.Dabbler, needed);
+                buckets.Dabbler -= stealDabbler;
+                buckets.Core += stealDabbler;
+                needed -= stealDabbler;
+
+                // 2. Reallocate from Maintainer
+                if (needed > 0)
+                {
+                    int stealMaint = Math.Min(buckets.Maintainer, needed);
+                    buckets.Maintainer -= stealMaint;
+                    buckets.Core += stealMaint;
+                    needed -= stealMaint;
+                }
+
+                // 3. Reallocate from Builder (Preserve minimum if possible)
+                if (needed > 0)
+                {
+                    int availableBuilder = Math.Max(0, buckets.Builder - 20); 
+                    int stealBuild = Math.Min(availableBuilder, needed);
+                    buckets.Builder -= stealBuild;
+                    buckets.Core += stealBuild;
+                }
+            }
+
+            return buckets;
+        }
 
         public static double GetPriorityWeight(PriorityLevel priority)
         {
             switch (priority)
             {
-                case PriorityLevel.Core:
-                    return 10.0;
-                case PriorityLevel.Builder:
-                    return 5.0;
-                case PriorityLevel.Maintainer:
-                    return 2.0;
-                case PriorityLevel.Dabbler:
-                    return 0.5;
-                default:
-                    return 1.0;
+                case PriorityLevel.Core: return 0.50;
+                case PriorityLevel.Builder: return 0.30;
+                case PriorityLevel.Maintainer: return 0.25;
+                case PriorityLevel.Dabbler: return 0.15;
+                default: return 0.15;
             }
         }
 
-        public static double CalculateUrgency(Skill skill)
-        {
-            if (skill.LastPracticed == DateTime.MinValue) return 10000;
-            double daysSice = (DateTime.Now - skill.LastPracticed).TotalDays;
-            double priorityWeight = GetPriorityWeight(skill.Priority);
-
-            return daysSice * priorityWeight;
-        }
         public static double CalculateUrgency(Skill skill, DateTime effectiveLastPracticed)
         {
-            // If never practiced, urgency is Infinite (must be scheduled!)
             if (effectiveLastPracticed == DateTime.MinValue) return 10000;
 
             double daysSince = (DateTime.Now - effectiveLastPracticed).TotalDays;
+            if (daysSince < 0) daysSince = 0;
+
+            double urgency = daysSince * GetPriorityWeight(skill.Priority);
             
-            // Prevent negative days if simulation looks slightly into future (edge case)
-            if (daysSince < 0) daysSince = 0; 
+            // Weight debt to prioritize recovery
+            if (skill.MinutesDebt > 0)
+            {
+                urgency += (skill.MinutesDebt * 0.1); 
+            }
 
-            return daysSince * GetPriorityWeight(skill.Priority);
+            return urgency;
         }
-
-
     }
-
 }
