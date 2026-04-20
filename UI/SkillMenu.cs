@@ -1,5 +1,6 @@
 using LTO.Models;
 using System;
+using System.ComponentModel.Design;
 using System.Linq;
 
 namespace LTO.UI
@@ -30,6 +31,14 @@ namespace LTO.UI
             {
                 Console.Clear();
                 Console.WriteLine("No skills found.");
+                Console.WriteLine("Would you like to add a skill now? (y/n)");
+                string? addNow = Console.ReadLine();
+                if (addNow != null && addNow.ToLower() == "y")
+                {
+                    Console.Clear();
+                    AddSkill();
+                }
+                else Console.Clear();
                 return;
             }
             Console.WriteLine("------Skill List--------");
@@ -45,7 +54,7 @@ namespace LTO.UI
             string? name;
             do
             {
-                Console.WriteLine("Enter skill name:");
+                Console.Write("Enter skill name: ");
                 name = Console.ReadLine();
                 if (string.IsNullOrWhiteSpace(name))
                 {
@@ -53,34 +62,66 @@ namespace LTO.UI
                 }
             } while (string.IsNullOrWhiteSpace(name));
 
-            Console.WriteLine("Select Priority (1: Core, 2: Builder, 3: Maintainer, 4: Dabbler):");
-
-            int priorityInt;
-            while (!int.TryParse(Console.ReadLine(), out priorityInt) || !Enum.IsDefined(typeof(PriorityLevel), priorityInt))
-            {
-                Console.WriteLine("Invalid input. Enter 1-4.");
-            }
-
-            Skill newSkill = new Skill
-            {
-                Name = name,
-                Priority = (PriorityLevel)priorityInt,
-                UrgencyLevel = 1,
-                LastPracticed = DateTime.MinValue,
-                MinutesInvested = 0,
-                MinutesDebt = 0
-            };
-
-            var result = Program.DataService.AddSkill(newSkill);
             
-            if (result.Success)
+            bool success = false;
+            while (!success)
             {
-                Console.WriteLine("Skill added.");
-            }
-            else
-            {
-                Console.WriteLine($"\n{result.Message}");
-                Console.ReadLine();
+                Console.Write("Select Priority (1-Core, 2-Builder, 3-Maintainer, 4-Info, 0-Cancel): ");
+                int priorityInt = 0;
+                while (!int.TryParse(Console.ReadLine(), out priorityInt) || priorityInt < 0 || priorityInt > 5)
+                {
+                    Console.WriteLine("Invalid selection. Enter 0-5.");
+                }
+                if (priorityInt == 0)
+                {
+                    Console.Clear();
+                    return;
+                }
+                if (priorityInt == 4)
+                {
+                    Console.Clear();
+                    Console.WriteLine("\n---Priority Categories---");
+                    Console.WriteLine("1. Core: Essential skills that drive your main goals. Limit 1-2 to maintain focus.");
+                    Console.WriteLine("2. Builder: Important skills that support your core areas. Limit 2-4 based on available time.");
+                    Console.WriteLine("3. Maintainer: Skills you want to keep alive but aren't a current focus. No strict limit, but be mindful of capacity.");
+                    Console.WriteLine("-------------------------\n");
+                    Console.WriteLine($"Skill name: {name}");
+                    Console.Write("Select Priority (1-3): ");
+                    while (!int.TryParse(Console.ReadLine(), out priorityInt) || !Enum.IsDefined(typeof(PriorityLevel), priorityInt))
+                    {
+                        Console.WriteLine("Invalid input. Enter 1-4.");
+                    }
+                    continue;
+                }
+
+                Skill newSkill = new Skill
+                {
+                    Name = name,
+                    Priority = (PriorityLevel)priorityInt,
+                    UrgencyLevel = 1,
+                    LastPracticed = DateTime.MinValue,
+                    MinutesInvested = 0,
+                    MinutesDebt = 0
+                };
+
+                var result = Program.DataService.AddSkill(newSkill);
+                if (result.Success)
+                {
+                    success = true;
+                    Console.WriteLine("Skill added.");
+                    Console.WriteLine("Would you like to add another skill? (y/n)");
+                    if (Console.ReadLine()?.ToLower() == "y")
+                    {
+                        Console.Clear();
+                        AddSkill();
+                    }
+                    else Console.Clear();
+                }
+                else
+                {
+                    Console.WriteLine($"\n{result.Message}");
+                    Console.WriteLine("Please select a different priority or adjust your profile's available time to accommodate more skills.");
+                }
             }
         }
 

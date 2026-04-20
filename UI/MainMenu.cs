@@ -18,16 +18,21 @@ namespace LTO.UI
                 if (currentProfile == null)
                 {
                     Console.WriteLine("Please complete your profile to get started.");
+                    Console.WriteLine("1. Create Profile");
+                    Console.WriteLine("5. Exit");
+                    Console.Write("Select an option: ");
                 }
                 else
                 {
                     Console.WriteLine($"Welcome back, {currentProfile.Name}! You have {Program.DataService.GetTotalSkills()} skills in your plan.");
+                    Console.WriteLine("1. Manage Profile");
+                    Console.WriteLine("2. Manage Skills");
+                    Console.WriteLine("3. View Skill Plan");
+                    Console.WriteLine("4. Daily Check-in (Log Progress)");
+                    Console.WriteLine("0. Exit");
+                    Console.Write("Select an option: ");
                 }
-                Console.WriteLine("1. Manage Profile");
-                Console.WriteLine("2. Manage Skills");
-                Console.WriteLine("3. View Skill Plan");
-                Console.WriteLine("4. Daily Check-in (Log Progress)");
-                Console.WriteLine("5. Exit");
+
 
                 string? userChoice = Console.ReadLine();
 
@@ -37,7 +42,7 @@ namespace LTO.UI
                     case "2": Console.Clear(); SkillMenu.Menu(); break;
                     case "3": Console.Clear(); SkillPlanView.ViewPlan(); break;
                     case "4": Console.Clear(); CheckInView.DailyCheckIn(); break;
-                    case "5": 
+                    case "0": 
                         exitProgram = true; 
                         Console.Clear();
                         Console.WriteLine("Exiting. Goodbye!");

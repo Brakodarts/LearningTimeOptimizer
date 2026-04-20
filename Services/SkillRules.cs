@@ -12,7 +12,6 @@ namespace LTO.Services
             PriorityLevel.Core => 60,
             PriorityLevel.Builder => 40,
             PriorityLevel.Maintainer => 20,
-            PriorityLevel.Dabbler => 20,
             _ => 20
         };
 
@@ -22,7 +21,6 @@ namespace LTO.Services
             PriorityLevel.Core => 20,
             PriorityLevel.Builder => 20,
             PriorityLevel.Maintainer => 10,
-            PriorityLevel.Dabbler => 5,
             _ => 5
         };
 
@@ -32,7 +30,6 @@ namespace LTO.Services
             PriorityLevel.Core => 240,     // 4 hours max
             PriorityLevel.Builder => 90,   // 1.5 hours max
             PriorityLevel.Maintainer => 45, // 45 mins max
-            PriorityLevel.Dabbler => 60,    // 1 hour max
             _ => 60
         };
     }

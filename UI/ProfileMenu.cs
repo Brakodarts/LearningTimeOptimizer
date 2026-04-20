@@ -1,5 +1,6 @@
 using LTO.Models;
 using System;
+using System.Diagnostics;
 
 namespace LTO.UI
 {
@@ -7,12 +8,40 @@ namespace LTO.UI
     {
         public static void Menu()
         {
-            Console.WriteLine("------Manage Profile--------");
-            Console.WriteLine("1. View Profile\n2. Edit Profile");
-            string? choice = Console.ReadLine();
+            Profile currentProfile = Program.DataService.GetProfile();
+            if (currentProfile == null)
+            {
+                EditProfile();
+                return;
+            }
+            else
+            {
+                ViewProfile();
+                Console.WriteLine("------Manage Profile--------");
+                Console.WriteLine("1. Restart Profile");
+                Console.WriteLine("2. Edit Availability");
+                Console.WriteLine("0. Back to Main Menu");
+                Console.Write("Select an option: ");
+                string? choice = Console.ReadLine();
 
-            if (choice == "1") { Console.Clear(); ViewProfile(); }
-            else if (choice == "2") { Console.Clear(); EditProfile(); }
+                switch (choice)
+                {
+                    case "0":
+                        Console.Clear();
+                        return;
+                    case "1":
+                        Console.Clear();
+                        EditProfile();
+                        break;
+                    case "2":
+                        Console.Clear();
+                        EditAvailability();
+                        break;
+                    default:
+                        Console.WriteLine("Invalid choice.");
+                        break;
+                }
+            }
         }
 
         public static void ViewProfile()
@@ -20,8 +49,9 @@ namespace LTO.UI
             var profile = Program.DataService.GetProfile();
             if (profile != null)
             {
+                Console.WriteLine("------Your Profile--------");
                 Console.WriteLine($"Name: {profile.Name}");
-                Console.WriteLine($"Weekday Mins: {profile.WeekdayAvailableMinutes} | Weekend Mins: {profile.WeekendAvailableMinutes}");
+                Console.WriteLine($"Weekday Mins: {profile.WeekdayAvailableMinutes}\nWeekend Mins: {profile.WeekendAvailableMinutes}");
                 Console.WriteLine($"Skills Tracked: {Program.DataService.GetTotalSkills()}");
             }
             else
@@ -45,6 +75,27 @@ namespace LTO.UI
             ProfileForm(profile);
         }
 
+        public static void EditAvailability()
+        {
+            var profile = Program.DataService.GetProfile();
+            Console.WriteLine("------Edit Availability--------");
+            Console.Write($"Available time on a Weekday (Minutes): {profile.WeekdayAvailableMinutes}) | New Value: ");
+            int.TryParse(Console.ReadLine(), out int wdMins);
+            profile.WeekdayAvailableMinutes = wdMins;
+
+            Console.Write($"Practice on Weekends?: {profile.WeekendsAvailable} | New Value (y/n): ");
+            profile.WeekendsAvailable = Console.ReadLine()?.ToLower() == "y";
+
+            Console.Write($"Available time on a Weekend (Minutes): {profile.WeekendAvailableMinutes}) | New Value: ");
+            int.TryParse(Console.ReadLine(), out int weMins);
+            profile.WeekendAvailableMinutes = weMins;
+
+            Console.Write($"Holidays Available?: {profile.HolidaysAvailable} | New Value (y/n): ");
+            profile.HolidaysAvailable = Console.ReadLine()?.ToLower() == "y";
+
+            Program.DataService.UpdateProfile(profile);
+        }
+
         public static void ProfileForm(Profile profile)
         {
             Console.Write("Name: ");
@@ -58,7 +109,7 @@ namespace LTO.UI
             int.TryParse(Console.ReadLine(), out int wdMins);
             profile.WeekdayAvailableMinutes = wdMins;
 
-            Console.Write("Would you like to Practice on Weekends? (y/n):");
+            Console.Write("Would you like to Practice on Weekends? (y/n): ");
             profile.WeekendsAvailable = Console.ReadLine()?.ToLower() == "y";
             if (profile.WeekendsAvailable)
             {
@@ -71,12 +122,22 @@ namespace LTO.UI
                  profile.WeekendAvailableMinutes = 0;
             }
 
-            Console.Write("Holidays Available? (y/n):");
+            Console.Write("Holidays Available? (y/n): ");
             profile.HolidaysAvailable = Console.ReadLine()?.ToLower() == "y";
 
             Program.DataService.UpdateProfile(profile);
 
             Console.WriteLine("Profile Saved.");
+            if (Program.DataService.GetTotalSkills() == 0)
+            {
+                Console.WriteLine("You don't have any skills in your plan yet. Would you like to add one now? (y/n)");
+                if (Console.ReadLine()?.ToLower() == "y")
+                {
+                    Console.Clear();
+                    SkillMenu.AddSkill();
+                }
+                else Console.Clear();
+            }
         }
     }
 }

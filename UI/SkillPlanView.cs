@@ -8,14 +8,8 @@ namespace LTO.UI
     {
         public static void ViewPlan()
         {
+            Console.Clear();
             Console.WriteLine("------ WEEKLY PLAN --------");
-            
-            // Check if profile exists
-            if (Program.DataService.GetProfile() == null)
-            {
-                Console.WriteLine("Profile required.");
-                return;
-            }
 
             Console.WriteLine("Refreshing Plan...");
             Program.DataService.RegeneratePlan();

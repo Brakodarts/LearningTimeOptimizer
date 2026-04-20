@@ -31,9 +31,9 @@ namespace LTO.Services
                     return (false, "Limit Reached: Maximum 2 Core Skills allowed to ensure focus.");
                 }
 
-                if (coreCount >= 1 && (profile == null || profile.WeekdayAvailableMinutes < 240))
+                if (coreCount >= 1 && (profile == null || profile.WeekdayAvailableMinutes*5 + profile.WeekendAvailableMinutes*2 < 1680))
                 {
-                    return (false, "Capacity Warning: < 4 hours available. Recommended limit is 1 Core Skill.");
+                    return (false, "Capacity Warning: You have less than 4 hours available. Recommended limit is 1 Core Skill.");
                 }
             }
             else if (skill.Priority == PriorityLevel.Builder)
@@ -41,7 +41,7 @@ namespace LTO.Services
                 int builderCount = DatabaseManager.Connection.Table<Skill>().Count(s => s.Priority == PriorityLevel.Builder);
                 var profile = GetProfile();
                 
-                int limit = (profile != null && profile.WeekdayAvailableMinutes > 240) ? 4 : 2;
+                int limit = (profile != null && profile.WeekdayAvailableMinutes*5 + profile.WeekendAvailableMinutes*2 > 1680) ? 4 : 2;
 
                 if (builderCount >= limit)
                 {
